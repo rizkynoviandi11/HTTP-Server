@@ -1,5 +1,6 @@
 import socket
 import sys
+import string
 from BaseHTTPServer import BaseHTTPRequestHandler
 from StringIO import StringIO
 
@@ -11,7 +12,7 @@ class HTTPRequest(BaseHTTPRequestHandler):
         self.parse_request()
 
 if len(sys.argv) > 1:
-    HOST, PORT = 'localhost', int(sys.argv[1])
+    HOST, PORT = '', int(sys.argv[1])
 else:
     sys.exit("Please specify the port")
 
@@ -25,41 +26,59 @@ print 'Serving HTTP on port %s ...' % PORT
 while True:
     client_connection, client_address = listen_socket.accept()
     request = HTTPRequest(client_connection.recv(1024))
-    ver = request.request_version
-    response, fileRequest, contentType, contentLength = ''
+    command = request.command
+    var = request.request_version
+    response, contentType, contentLength, files = '', '', '', ''
 
-    if ver != 'HTTP/1.1' or ver != 'HTTP/1.0':
-        response = ver + '400 Bad Request \n\r'
+    if var != 'HTTP/1.1' and var != 'HTTP/1.0':
+        response = var + ' 400 Bad Request \r\n'
 
-    elif request.command != 'GET' or request.command != 'POST':
-        response = ver + '501 Not Implemented \n\r'
-
-    if request.command == 'GET':
-        if request.path == '/':
-            response = ver + '302 Found \n\r'
-
-        elif request.path == '/style':
-            fileRequest = 'style.css'
-            f = open(fileRequest, 'r')
-            files = f.read()
-            contentType = 'Content-Type: style/css \n\r'
-
-        elif request.path == '/background':
-            fileRequest = 'background.jpg'
-            contentType =
-
-        elif request.path == '/hello-world':
-
-        else:
+    elif command != 'GET' and command != 'POST':
+        response = var + ' 501 Not Implemented \r\n'
 
     else:
 
+        if request.command == 'GET':
+            if request.path == '/':
+                response = var + ' 302 Found \r\nLocation: \hello-world'
+            elif request.path == '/style':
+                response = var + ' 200 OK \r\n'
+                fileRequest = 'style.css'
+                f = open(fileRequest, 'rb')
+                files = f.read()
+                contentType = 'Content-Type: text/css \r\n\r\n'
+                f.close()
+            elif request.path == '/background':
+                response = var + ' 200 OK \r\n'
+                fileRequest = 'background.jpg'
+                f = open(fileRequest, 'rb')
+                files = f.read()
+                contentType = 'Content-Type: image/jpg \r\n\r\n'
+                f.close()
+            elif request.path == '/hello-world':
+                response = var + ' 200 OK \r\n'
+                fileRequest = 'hello-world.html'
+                f = open(fileRequest, 'rb')
+                files_old = f.read()
+                files = string.replace(files_old, '__HELLO__', 'World')
+                contentType = 'Content-Type: text/html \r\n\r\n'
+                f.close()
 
+        elif request.command == 'POST':
+            if request.headers['Content-Type'] == 'application/x-www-form-urlencoded':
+                fileRequest = 'hello-world.html'
+                f = open(fileRequest, 'rb')
+                files_old = f.read()
+                files.replace(files_old, '__HELLO__', )
+                contentType = 'Content-Type: text/html \r\n'
+                f.close()
+            else:
+                response = var + ' 400 Bad Request \r\n'
 
-    #http_response = """\
-#HTTP/1.1 200 OK
+        else:
+            response = var + ' 404 Not Found  \r\n'
 
-#Hello, World!
-#"""
-    #client_connection.sendall(http_response)
+    http_response = response + contentType + files
+    client_connection.send(http_response)
+    print 'Connection: close'
     client_connection.close()
