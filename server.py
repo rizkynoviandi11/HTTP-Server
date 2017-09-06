@@ -1,6 +1,8 @@
 import socket
 import sys
 import string
+import random
+import time
 from BaseHTTPServer import BaseHTTPRequestHandler
 from StringIO import StringIO
 
@@ -25,7 +27,9 @@ print 'Serving HTTP on port %s ...' % PORT
 
 while True:
     client_connection, client_address = listen_socket.accept()
-    request = HTTPRequest(client_connection.recv(1024))
+    req = client_connection.recv(1024)
+    req_content = req.split('\n')
+    request = HTTPRequest(req)
     command = request.command
     var = request.request_version
     response, contentType, contentLength, files = '', '', '', ''
@@ -37,7 +41,6 @@ while True:
         response = var + ' 501 Not Implemented \r\n'
 
     else:
-
         if request.command == 'GET':
             if request.path == '/':
                 response = var + ' 302 Found \r\nLocation: \hello-world'
@@ -47,6 +50,7 @@ while True:
                 f = open(fileRequest, 'rb')
                 files = f.read()
                 contentType = 'Content-Type: text/css \r\n\r\n'
+                contentLength = 'Content-Length: ' + str(len(files)) + '\r\n'
                 f.close()
             elif request.path == '/background':
                 response = var + ' 200 OK \r\n'
@@ -54,7 +58,7 @@ while True:
                 f = open(fileRequest, 'rb')
                 files = f.read()
                 contentType = 'Content-Type: image/jpg \r\n\r\n'
-                f.close()
+                contentLength = 'Content-Length: ' + str(len(files)) + '\r\n'
             elif request.path == '/hello-world':
                 response = var + ' 200 OK \r\n'
                 fileRequest = 'hello-world.html'
@@ -62,15 +66,34 @@ while True:
                 files_old = f.read()
                 files = string.replace(files_old, '__HELLO__', 'World')
                 contentType = 'Content-Type: text/html \r\n\r\n'
+                contentLength = 'Content-Length: '+str(len(files))+'\r\n'
                 f.close()
+            elif request.path.split('?')[0] == '/info':
+                if request.path.split('?')[1].split('=')[1] == 'time':
+                    response = var + ' 200 OK \r\n'
+                    files = time.ctime()
+                    contentType = 'Content-Type: text/html \r\n\r\n'
+                    contentLength = 'Content-Length: ' + str(len(files)) + '\r\n'
+                elif request.path.split('?')[1].split('=')[1] == 'random':
+                    response = var + ' 200 OK \r\n'
+                    files = str(random.randint(0, 100000000000000000))
+                    contentType = 'Content-Type: text/html \r\n\r\n'
+                    contentLength = 'Content-Length: ' + str(len(files)) + '\r\n'
+                else:
+                    response = var + ' 404 Not Found  \r\n'
+                    files = 'No Data'
+            else:
+                response = var + ' 404 Not Found  \r\n'
 
         elif request.command == 'POST':
             if request.headers['Content-Type'] == 'application/x-www-form-urlencoded':
+                response = var + ' 200 OK \r\n'
                 fileRequest = 'hello-world.html'
                 f = open(fileRequest, 'rb')
                 files_old = f.read()
-                files.replace(files_old, '__HELLO__', )
-                contentType = 'Content-Type: text/html \r\n'
+                files = string.replace(files_old, '__HELLO__', req_content[len(req_content)-1].split('=')[1])
+                contentType = 'Content-Type: text/html \r\n\r\n'
+                contentLength = 'Content-Length: ' + str(len(files)) + '\r\n'
                 f.close()
             else:
                 response = var + ' 400 Bad Request \r\n'
@@ -78,7 +101,8 @@ while True:
         else:
             response = var + ' 404 Not Found  \r\n'
 
-    http_response = response + contentType + files
+    http_response = response + contentLength + contentType + files
     client_connection.send(http_response)
-    print 'Connection: close'
+    print http_response
+    print "Connection:close"
     client_connection.close()
