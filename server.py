@@ -3,8 +3,10 @@ import sys
 import string
 import random
 import time
+import hashlib
 from BaseHTTPServer import BaseHTTPRequestHandler
 from StringIO import StringIO
+
 
 class HTTPRequest(BaseHTTPRequestHandler):
     def __init__(self, request_text):
@@ -12,6 +14,7 @@ class HTTPRequest(BaseHTTPRequestHandler):
         self.raw_requestline = self.rfile.readline()
         self.error_code = self.error_message = None
         self.parse_request()
+
 
 if len(sys.argv) > 1:
     HOST, PORT = '', int(sys.argv[1])
@@ -31,77 +34,107 @@ while True:
     req_content = req.split('\n')
     request = HTTPRequest(req)
     command = request.command
-    var = request.request_version
-    response, contentType, contentLength, files = '', '', '', ''
+    httpVersion = request.request_version
+    response, contentType, contentLength, files, etag = '', '', '', '', ''
 
-    if var != 'HTTP/1.1' and var != 'HTTP/1.0':
-        response = var + ' 400 Bad Request \r\n'
+    if httpVersion != 'HTTP/1.1' and httpVersion != 'HTTP/1.0':
+        response = httpVersion + ' 400 Bad Request \r\n'
+        contentType = 'Content-Type: text/plain \r\n'
+        contentLength = 'Content-Length: ' + str(len(response)) + '\r\n\r\n'
 
     elif command != 'GET' and command != 'POST':
-        response = var + ' 501 Not Implemented \r\n'
+        response = httpVersion + ' 501 Not Implemented \r\n'
+        contentType = 'Content-Type: text/plain \r\n'
+        contentLength = 'Content-Length: ' + str(len(response)) + '\r\n\r\n'
 
     else:
         if request.command == 'GET':
             if request.path == '/':
-                response = var + ' 302 Found \r\nLocation: \hello-world'
+                response = httpVersion + ' 302 Found \r\nLocation: \hello-world\r\n'
+                contentType = 'Content-Type: text/plain \r\n'
+                contentLength = 'Content-Length: ' + str(len(response)) + '\r\n\r\n'
             elif request.path == '/style':
-                response = var + ' 200 OK \r\n'
                 fileRequest = 'style.css'
                 f = open(fileRequest, 'rb')
                 files = f.read()
-                contentType = 'Content-Type: text/css \r\n\r\n'
-                contentLength = 'Content-Length: ' + str(len(files)) + '\r\n'
+                encryptedFile = hashlib.sha256(files).hexdigest()
+                if 'if-none-match' in request.headers.keys() and encryptedFile == request.headers['If-None-Match']:
+                    response = httpVersion + ' 304 Not Modified\r\n'
+                    contentType = 'Content-Type: text/plain \r\n'
+                    contentLength = 'Content-Length: ' + str(len(response)) + '\r\n\r\n'
+                else:
+                    response = httpVersion + ' 200 OK \r\n'
+                    etag = 'ETag: ' + str(encryptedFile) + '\r\n'
+                    contentType = 'Content-Type: text/css \r\n'
+                    contentLength = 'Content-Length: ' + str(len(files)) + '\r\n\r\n'
                 f.close()
             elif request.path == '/background':
-                response = var + ' 200 OK \r\n'
+                response = httpVersion + ' 200 OK \r\n'
                 fileRequest = 'background.jpg'
                 f = open(fileRequest, 'rb')
                 files = f.read()
-                contentType = 'Content-Type: image/jpg \r\n\r\n'
-                contentLength = 'Content-Length: ' + str(len(files)) + '\r\n'
+                encryptedFile = hashlib.sha256(files).hexdigest()
+                if 'if-none-match' in request.headers.keys() and encryptedFile == request.headers['If-None-Match']:
+                    response = httpVersion + ' 304 Not Modified\r\n'
+                    contentType = 'Content-Type: text/plain \r\n'
+                    contentLength = 'Content-Length: ' + str(len(response)) + '\r\n\r\n'
+                else:
+                    response = httpVersion + ' 200 OK \r\n'
+                    etag = 'ETag: ' + str(encryptedFile) + '\r\n'
+                    contentType = 'Content-Type: image/jpg \r\n'
+                    contentLength = 'Content-Length: ' + str(len(files)) + '\r\n\r\n'
+                f.close()
             elif request.path == '/hello-world':
-                response = var + ' 200 OK \r\n'
+                response = httpVersion + ' 200 OK \r\n'
                 fileRequest = 'hello-world.html'
                 f = open(fileRequest, 'rb')
                 files_old = f.read()
                 files = string.replace(files_old, '__HELLO__', 'World')
-                contentType = 'Content-Type: text/html \r\n\r\n'
-                contentLength = 'Content-Length: '+str(len(files))+'\r\n'
+                contentType = 'Content-Type: text/html \r\n'
+                contentLength = 'Content-Length: ' + str(len(files)) + '\r\n\r\n'
                 f.close()
             elif request.path.split('?')[0] == '/info':
                 if request.path.split('?')[1].split('=')[1] == 'time':
-                    response = var + ' 200 OK \r\n'
+                    response = httpVersion + ' 200 OK \r\n'
                     files = time.ctime()
-                    contentType = 'Content-Type: text/html \r\n\r\n'
-                    contentLength = 'Content-Length: ' + str(len(files)) + '\r\n'
+                    contentType = 'Content-Type: text/html \r\n'
+                    contentLength = 'Content-Length: ' + str(len(files)) + '\r\n\r\n'
                 elif request.path.split('?')[1].split('=')[1] == 'random':
-                    response = var + ' 200 OK \r\n'
+                    response = httpVersion + ' 200 OK \r\n'
                     files = str(random.randint(0, 100000000000000000))
-                    contentType = 'Content-Type: text/html \r\n\r\n'
-                    contentLength = 'Content-Length: ' + str(len(files)) + '\r\n'
+                    contentType = 'Content-Type: text/html \r\n'
+                    contentLength = 'Content-Length: ' + str(len(files)) + '\r\n\r\n'
                 else:
-                    response = var + ' 404 Not Found  \r\n'
                     files = 'No Data'
+                    contentType = 'Content-Type: text/plain \r\n'
+                    contentLength = 'Content-Length: ' + str(len(files)) + '\r\n\r\n'
             else:
-                response = var + ' 404 Not Found  \r\n'
+                response = httpVersion + ' 404 Not Found  \r\n'
+                contentType = 'Content-Type: text/plain \r\n'
+                contentLength = 'Content-Length: ' + str(len(response)) + '\r\n\r\n'
 
         elif request.command == 'POST':
-            if request.headers['Content-Type'] == 'application/x-www-form-urlencoded':
-                response = var + ' 200 OK \r\n'
+            if request.path == '/':
+                response = httpVersion + ' 302 Found \r\nLocation: \hello-world\r\n'
+                contentType = 'Content-Type: text/plain \r\n'
+                contentLength = 'Content-Length: ' + str(len(response)) + '\r\n\r\n'
+            elif 'content-type' in request.headers.keys() and request.headers['content-type'] == 'application/x-www-form-urlencoded' and len(req_content) > 0:
+                response = httpVersion + ' 200 OK \r\n'
                 fileRequest = 'hello-world.html'
                 f = open(fileRequest, 'rb')
                 files_old = f.read()
-                files = string.replace(files_old, '__HELLO__', req_content[len(req_content)-1].split('=')[1])
-                contentType = 'Content-Type: text/html \r\n\r\n'
-                contentLength = 'Content-Length: ' + str(len(files)) + '\r\n'
+                files = string.replace(files_old, '__HELLO__', (req_content[len(req_content) - 1].split('=')[1]).replace('+', ' '))
+                contentType = 'Content-Type: text/html \r\n'
+                contentLength = 'Content-Length: ' + str(len(files)) + '\r\n\r\n'
                 f.close()
             else:
-                response = var + ' 400 Bad Request \r\n'
-
+                response = httpVersion + ' 400 Bad Request \r\n'
+                contentType = 'Content-Type: text/plain \r\n'
+                contentLength = 'Content-Length: ' + str(len(response)) + '\r\n\r\n'
         else:
-            response = var + ' 404 Not Found  \r\n'
-
-    http_response = response + contentLength + contentType + files
+            response = httpVersion + ' 404 Not Found  \r\n'
+            contentType = 'Content-Type: text/plain \r\n'
+            contentLength = 'Content-Length: ' + str(len(response)) + '\r\n\r\n'
+    http_response = response + "Connection: close\r\n" + etag + contentType + contentLength + files
     client_connection.send(http_response)
-    print "Connection:close"
     client_connection.close()
