@@ -103,6 +103,5 @@ while True:
 
     http_response = response + contentLength + contentType + files
     client_connection.send(http_response)
-    print http_response
     print "Connection:close"
     client_connection.close()
